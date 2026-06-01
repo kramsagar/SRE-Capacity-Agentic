@@ -1,0 +1,33 @@
+# references/namespace_inventory.yaml
+# Maps OCP namespaces to their microservices
+# Edit this file to onboard new namespaces/services
+
+namespaces:
+  payments-prod:
+    display_name: "Payments Production"
+    team: "payments-team"
+    microservices:
+      - payment-service
+      - order-service
+      - inventory-service
+      - notification-service
+    quota:
+      cpu_cores: 16         # total CPU limit for namespace
+      memory_gb: 32         # total memory limit for namespace
+      max_pods: 80
+
+  payments-staging:
+    display_name: "Payments Staging"
+    team: "payments-team"
+    microservices:
+      - payment-service
+      - order-service
+      - inventory-service
+      - notification-service
+    quota:
+      cpu_cores: 8
+      memory_gb: 16
+      max_pods: 40
+
+# Default namespace for scripts when not specified
+default_namespace: "payments-prod"

@@ -1,0 +1,52 @@
+# references/splunk_queries.yaml
+# All Splunk SPL queries for API call growth tracking
+# Variables: {namespace}, {service}, {lookback_days}
+
+api_calls:
+  # Total API calls per service over last N days
+  per_service_trend:
+    payment-service: |
+      index=ocp_access_logs namespace="{namespace}" service="payment-service"
+      | timechart span=1d count as api_calls
+      | eval service="payment-service"
+    order-service: |
+      index=ocp_access_logs namespace="{namespace}" service="order-service"
+      | timechart span=1d count as api_calls
+      | eval service="order-service"
+    inventory-service: |
+      index=ocp_access_logs namespace="{namespace}" service="inventory-service"
+      | timechart span=1d count as api_calls
+      | eval service="inventory-service"
+    notification-service: |
+      index=ocp_access_logs namespace="{namespace}" service="notification-service"
+      | timechart span=1d count as api_calls
+      | eval service="notification-service"
+
+  # All services in one query (namespace level)
+  namespace_trend: |
+    index=ocp_access_logs namespace="{namespace}"
+    | timechart span=1d count by service
+
+  # Error rate per service
+  error_rate: |
+    index=ocp_access_logs namespace="{namespace}"
+    | eval is_error=if(status>=500, 1, 0)
+    | timechart span=1d avg(is_error) as error_rate by service
+
+  # P99 latency trend
+  latency_trend: |
+    index=ocp_access_logs namespace="{namespace}"
+    | timechart span=1d p99(response_time_ms) as p99_latency by service
+
+  # API calls last 30 days summary (used for growth rate)
+  growth_summary: |
+    index=ocp_access_logs namespace="{namespace}" earliest=-{lookback_days}d
+    | timechart span=1d count by service
+    | fillnull value=0
+
+  # Peak hour detection (helps understand scaling needs)
+  peak_hours: |
+    index=ocp_access_logs namespace="{namespace}" earliest=-7d
+    | eval hour=strftime(_time, "%H")
+    | stats avg(count) as avg_calls by hour, service
+    | sort hour

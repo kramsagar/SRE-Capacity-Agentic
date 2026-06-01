@@ -1,0 +1,78 @@
+# references/prometheus_queries.yaml
+# All PromQL queries for capacity management
+# Parameterized with {namespace} and {service} placeholders
+# Replace at runtime via prometheus_collector.py
+
+namespace: "payments-prod"   # override via config or CLI
+
+microservices:
+  payment-service:
+    pod_selector: "payment-service.*"
+    cpu:
+      usage: 'sum(rate(container_cpu_usage_seconds_total{namespace="{namespace}", pod=~"payment-service.*", container!=""}[5m]))'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"payment-service.*", resource="cpu"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"payment-service.*", resource="cpu"})'
+    memory:
+      usage: 'sum(container_memory_working_set_bytes{namespace="{namespace}", pod=~"payment-service.*", container!=""})'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"payment-service.*", resource="memory"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"payment-service.*", resource="memory"})'
+    hpa:
+      current_replicas: 'kube_horizontalpodautoscaler_status_current_replicas{namespace="{namespace}", horizontalpodautoscaler="payment-service"}'
+      max_replicas: 'kube_horizontalpodautoscaler_spec_max_replicas{namespace="{namespace}", horizontalpodautoscaler="payment-service"}'
+      desired_replicas: 'kube_horizontalpodautoscaler_status_desired_replicas{namespace="{namespace}", horizontalpodautoscaler="payment-service"}'
+
+  order-service:
+    pod_selector: "order-service.*"
+    cpu:
+      usage: 'sum(rate(container_cpu_usage_seconds_total{namespace="{namespace}", pod=~"order-service.*", container!=""}[5m]))'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"order-service.*", resource="cpu"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"order-service.*", resource="cpu"})'
+    memory:
+      usage: 'sum(container_memory_working_set_bytes{namespace="{namespace}", pod=~"order-service.*", container!=""})'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"order-service.*", resource="memory"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"order-service.*", resource="memory"})'
+    hpa:
+      current_replicas: 'kube_horizontalpodautoscaler_status_current_replicas{namespace="{namespace}", horizontalpodautoscaler="order-service"}'
+      max_replicas: 'kube_horizontalpodautoscaler_spec_max_replicas{namespace="{namespace}", horizontalpodautoscaler="order-service"}'
+      desired_replicas: 'kube_horizontalpodautoscaler_status_desired_replicas{namespace="{namespace}", horizontalpodautoscaler="order-service"}'
+
+  inventory-service:
+    pod_selector: "inventory-service.*"
+    cpu:
+      usage: 'sum(rate(container_cpu_usage_seconds_total{namespace="{namespace}", pod=~"inventory-service.*", container!=""}[5m]))'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"inventory-service.*", resource="cpu"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"inventory-service.*", resource="memory"})'
+    memory:
+      usage: 'sum(container_memory_working_set_bytes{namespace="{namespace}", pod=~"inventory-service.*", container!=""})'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"inventory-service.*", resource="memory"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"inventory-service.*", resource="memory"})'
+    hpa:
+      current_replicas: 'kube_horizontalpodautoscaler_status_current_replicas{namespace="{namespace}", horizontalpodautoscaler="inventory-service"}'
+      max_replicas: 'kube_horizontalpodautoscaler_spec_max_replicas{namespace="{namespace}", horizontalpodautoscaler="inventory-service"}'
+      desired_replicas: 'kube_horizontalpodautoscaler_status_desired_replicas{namespace="{namespace}", horizontalpodautoscaler="inventory-service"}'
+
+  notification-service:
+    pod_selector: "notification-service.*"
+    cpu:
+      usage: 'sum(rate(container_cpu_usage_seconds_total{namespace="{namespace}", pod=~"notification-service.*", container!=""}[5m]))'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"notification-service.*", resource="cpu"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"notification-service.*", resource="cpu"})'
+    memory:
+      usage: 'sum(container_memory_working_set_bytes{namespace="{namespace}", pod=~"notification-service.*", container!=""})'
+      request: 'sum(kube_pod_container_resource_requests{namespace="{namespace}", pod=~"notification-service.*", resource="memory"})'
+      limit: 'sum(kube_pod_container_resource_limits{namespace="{namespace}", pod=~"notification-service.*", resource="memory"})'
+    hpa:
+      current_replicas: 'kube_horizontalpodautoscaler_status_current_replicas{namespace="{namespace}", horizontalpodautoscaler="notification-service"}'
+      max_replicas: 'kube_horizontalpodautoscaler_spec_max_replicas{namespace="{namespace}", horizontalpodautoscaler="notification-service"}'
+      desired_replicas: 'kube_horizontalpodautoscaler_status_desired_replicas{namespace="{namespace}", horizontalpodautoscaler="notification-service"}'
+
+# Namespace-level aggregates
+namespace_totals:
+  cpu_usage: 'sum(rate(container_cpu_usage_seconds_total{namespace="{namespace}", container!=""}[5m]))'
+  cpu_quota: 'sum(kube_resourcequota{namespace="{namespace}", resource="limits.cpu", type="hard"})'
+  cpu_used_quota: 'sum(kube_resourcequota{namespace="{namespace}", resource="limits.cpu", type="used"})'
+  memory_usage: 'sum(container_memory_working_set_bytes{namespace="{namespace}", container!=""})'
+  memory_quota: 'sum(kube_resourcequota{namespace="{namespace}", resource="limits.memory", type="hard"})'
+  memory_used_quota: 'sum(kube_resourcequota{namespace="{namespace}", resource="limits.memory", type="used"})'
+  pod_count: 'count(kube_pod_info{namespace="{namespace}"})'
+  pod_quota: 'kube_resourcequota{namespace="{namespace}", resource="pods", type="hard"}'

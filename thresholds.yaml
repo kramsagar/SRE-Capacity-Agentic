@@ -1,0 +1,26 @@
+# references/thresholds.yaml
+
+capacity:
+  warn_percent: 70          # % of limit → WARN
+  critical_percent: 85      # % of limit → CRITICAL
+  days_to_exhaustion_warn: 30
+  days_to_exhaustion_critical: 14
+
+hpa:
+  scale_headroom_warn: 0.80     # current_replicas / max_replicas > 80% → WARN
+  scale_headroom_critical: 0.90 # > 90% → CRITICAL
+
+memory_leak:
+  # Suspect leak if memory grows >X% per day AND api_calls are flat/declining
+  daily_growth_suspect_percent: 2.0
+  api_correlation_threshold: 0.5   # pearson r below this = not correlated
+
+growth_rate:
+  # Classify growth trend
+  stable_slope_threshold: 0.005     # slope < this = stable (normalized 0-1 scale)
+  high_growth_slope_threshold: 0.02 # slope > this = high growth
+
+namespace_contention:
+  # If sum of service cpu/mem limits > namespace quota * this factor, flag contention
+  overcommit_warn_factor: 0.85
+  overcommit_critical_factor: 0.95

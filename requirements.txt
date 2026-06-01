@@ -1,0 +1,8 @@
+# sre-agent/requirements.txt
+# Install: pip install -r requirements.txt
+
+httpx>=0.27.0       # async HTTP (Prometheus, Splunk REST)
+pyyaml>=6.0         # YAML config files
+numpy>=1.26.0       # math
+scipy>=1.13.0       # linear regression
+anthropic>=0.40.0   # LLM calls (only needed if using Anthropic API directly)
