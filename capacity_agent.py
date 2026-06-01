@@ -22,6 +22,7 @@ Pipeline (same in both modes):
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from datetime import datetime
@@ -29,6 +30,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
+
+# ── logging setup (call configure_logging() before anything else) ───────
+
+def configure_logging(debug: bool = False):
+    """
+    Set up rich logging for the whole agent pipeline.
+    DEBUG  → every HTTP call, every query, every parse step
+    INFO   → collection progress, prediction results, step banners
+    """
+    level  = logging.DEBUG if debug else logging.INFO
+    fmt    = "%(asctime)s.%(msecs)03d  %(name)-42s %(levelname)-8s  %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+    logging.basicConfig(level=level, format=fmt, datefmt=datefmt)
+    # Quiet noisy third-party libs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.INFO)
+
+log = logging.getLogger("__main__")
 
 from scripts.collectors.prometheus_collector import PrometheusCollector
 from scripts.collectors.splunk_collector     import SplunkCollector
@@ -42,12 +62,17 @@ from agent.skill_loader                      import SkillLoader
 
 # ── config (override with env vars) ────────────────────────────────────
 
-PROMETHEUS_URL = os.getenv("GRAFANA_URL",    "http://localhost:9090")
+PROMETHEUS_URL    = os.getenv("GRAFANA_URL",             "http://localhost:9090")
+GRAFANA_TOKEN     = os.getenv("GRAFANA_SERVICE_ACCOUNT_TOKEN", "")
+GRAFANA_DS_ID     = int(os.getenv("GRAFANA_DATASOURCE_ID",     "1"))
+PROMETHEUS_DIRECT = os.getenv("PROMETHEUS_DIRECT",       "false")
 SPLUNK_URL     = os.getenv("SPLUNK_HOST",    "https://localhost:8089")
 SPLUNK_TOKEN   = os.getenv("SPLUNK_TOKEN",   "")
-PROM_MODE      = os.getenv("PROM_MODE",      "http")   # "http" | "grafana_mcp"
-SPLUNK_MODE    = os.getenv("SPLUNK_MODE",    "http")   # "http" | "splunk_mcp"
-OCP_MODE       = os.getenv("OCP_MODE",       "cli")    # "cli"  | "ocp_mcp"
+SPLUNK_APP     = os.getenv("SPLUNK_APP",     "search")   # e.g. wf_ui_app_ctdlr
+SPLUNK_OWNER   = os.getenv("SPLUNK_OWNER",   "nobody")
+PROM_MODE      = os.getenv("PROM_MODE",      "http")     # "http" | "grafana_mcp"
+SPLUNK_MODE    = os.getenv("SPLUNK_MODE",    "http")     # "http" | "splunk_mcp"
+OCP_MODE       = os.getenv("OCP_MODE",       "cli")      # "cli"  | "ocp_mcp"
 
 
 # ── MCP client shim (used when running inside VS Code Copilot) ──────────
@@ -89,6 +114,8 @@ class CapacityAgent:
         prometheus_url: str = PROMETHEUS_URL,
         splunk_url:     str = SPLUNK_URL,
         splunk_token:   str = SPLUNK_TOKEN,
+        splunk_app:     str = SPLUNK_APP,
+        splunk_owner:   str = SPLUNK_OWNER,
         prom_mode:      str = PROM_MODE,
         splunk_mode:    str = SPLUNK_MODE,
         ocp_mode:       str = OCP_MODE,
@@ -97,12 +124,16 @@ class CapacityAgent:
         # Build collectors — inject mcp_client when in MCP mode
         self.prom_collector = PrometheusCollector(
             base_url=prometheus_url,
+            token=GRAFANA_TOKEN,
+            datasource_id=GRAFANA_DS_ID,
             mode=prom_mode,
             mcp_client=mcp_client,
         )
         self.splunk_collector = SplunkCollector(
             base_url=splunk_url,
             token=splunk_token,
+            splunk_app=splunk_app,
+            splunk_owner=splunk_owner,
             mode=splunk_mode,
             mcp_client=mcp_client,
         )
@@ -282,22 +313,58 @@ def _ok(msg):  print(f"   ✅ {msg}")
 async def main():
     import argparse
     p = argparse.ArgumentParser(description="SRE Capacity Agent")
-    p.add_argument("--namespace",    default="payments-prod")
-    p.add_argument("--service",      default=None)
-    p.add_argument("--days",         type=int, default=30)
-    p.add_argument("--dry-run",      action="store_true")
-    p.add_argument("--prometheus-url", default=os.getenv("GRAFANA_URL",  PROMETHEUS_URL))
-    p.add_argument("--splunk-url",     default=os.getenv("SPLUNK_HOST",  SPLUNK_URL))
-    p.add_argument("--splunk-token",   default=os.getenv("SPLUNK_TOKEN", SPLUNK_TOKEN))
-    p.add_argument("--prom-mode",      default=os.getenv("PROM_MODE",    PROM_MODE))
-    p.add_argument("--splunk-mode",    default=os.getenv("SPLUNK_MODE",  SPLUNK_MODE))
-    p.add_argument("--ocp-mode",       default=os.getenv("OCP_MODE",     OCP_MODE))
+    p.add_argument("--namespace",     default=os.getenv("OCP_NAMESPACE", "alprc-prod"))
+    p.add_argument("--service",       default=None)
+    p.add_argument("--days",          type=int, default=30)
+    p.add_argument("--dry-run",       action="store_true")
+    p.add_argument("--skip-health",   action="store_true",
+                   help="Skip pre-flight connectivity checks")
+    p.add_argument("--debug",         action="store_true",
+                   help="Enable DEBUG logging (very verbose)")
+    p.add_argument("--prometheus-url", default=os.getenv("GRAFANA_URL",   PROMETHEUS_URL))
+    p.add_argument("--grafana-token",  default=os.getenv("GRAFANA_SERVICE_ACCOUNT_TOKEN", GRAFANA_TOKEN))
+    p.add_argument("--splunk-url",     default=os.getenv("SPLUNK_HOST",   SPLUNK_URL))
+    p.add_argument("--splunk-token",   default=os.getenv("SPLUNK_TOKEN",  SPLUNK_TOKEN))
+    p.add_argument("--splunk-app",     default=os.getenv("SPLUNK_APP",    SPLUNK_APP),
+                   help="Splunk app ID e.g. wf_ui_app_ctdlr")
+    p.add_argument("--splunk-owner",   default=os.getenv("SPLUNK_OWNER",  SPLUNK_OWNER))
+    p.add_argument("--prom-mode",      default=os.getenv("PROM_MODE",     PROM_MODE))
+    p.add_argument("--splunk-mode",    default=os.getenv("SPLUNK_MODE",   SPLUNK_MODE))
+    p.add_argument("--ocp-mode",       default=os.getenv("OCP_MODE",      OCP_MODE))
     a = p.parse_args()
 
+    # ── configure logging first ─────────────────────────────────────────
+    configure_logging(debug=a.debug)
+    log.info(f"SRE Capacity Agent starting  namespace={a.namespace}  days={a.days}  "
+             f"dry_run={a.dry_run}  debug={a.debug}")
+
+    # ── pre-flight health checks ────────────────────────────────────────
+    if not a.skip_health and a.prom_mode == "http":
+        from scripts.health_check import run_all_checks
+        log.info("Running pre-flight health checks...")
+        ok = await run_all_checks(
+            grafana_url   = a.prometheus_url,
+            grafana_token = a.grafana_token,
+            splunk_url    = a.splunk_url,
+            splunk_token  = a.splunk_token,
+            splunk_app    = a.splunk_app,
+            splunk_owner  = a.splunk_owner,
+            namespace     = a.namespace,
+            oc_bin        = os.getenv("OC_PATH", "oc"),
+            verify_ssl    = False,
+        )
+        if not ok:
+            log.error("Health checks failed — fix the issues above then re-run.")
+            log.error("To skip checks: add --skip-health flag")
+            sys.exit(1)
+
+    # ── run agent ───────────────────────────────────────────────────────
     agent = CapacityAgent(
         prometheus_url=a.prometheus_url,
         splunk_url=a.splunk_url,
         splunk_token=a.splunk_token,
+        splunk_app=a.splunk_app,
+        splunk_owner=a.splunk_owner,
         prom_mode=a.prom_mode,
         splunk_mode=a.splunk_mode,
         ocp_mode=a.ocp_mode,
