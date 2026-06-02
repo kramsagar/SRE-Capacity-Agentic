@@ -1,0 +1,82 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "grafana-url",
+      "description": "Grafana URL (e.g. http://localhost:3000)",
+      "default": "http://localhost:3000"
+    },
+    {
+      "type": "promptString",
+      "id": "grafana-token",
+      "description": "Grafana Service Account Token (glsa_...)",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "splunk-host",
+      "description": "Splunk host (e.g. https://splunk.internal:8089)",
+      "default": "https://localhost:8089"
+    },
+    {
+      "type": "promptString",
+      "id": "splunk-token",
+      "description": "Splunk Bearer Token",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "splunk-app",
+      "description": "Splunk App context (e.g. wf_ui_app_ctdlr)",
+      "default": "wf_ui_app_ctdlr"
+    },
+    {
+      "type": "promptString",
+      "id": "ocp-api-url",
+      "description": "OCP API URL (oc whoami --show-server)",
+      "default": "https://api.your-cluster.example.com:6443"
+    },
+    {
+      "type": "promptString",
+      "id": "ocp-token",
+      "description": "OCP Bearer Token (oc whoami -t)",
+      "password": true
+    }
+  ],
+  "servers": {
+
+    "grafana": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@leval/mcp-grafana"],
+      "env": {
+        "GRAFANA_URL": "${input:grafana-url}",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${input:grafana-token}"
+      }
+    },
+
+    "splunk-mcp": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["${workspaceFolder}/splunk-mcp/server.py"],
+      "env": {
+        "SPLUNK_HOST":       "${input:splunk-host}",
+        "SPLUNK_TOKEN":      "${input:splunk-token}",
+        "SPLUNK_VERIFY_SSL": "false",
+        "SPLUNK_APP":        "${input:splunk-app}"
+      }
+    },
+
+    "ocp-mcp": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["${workspaceFolder}/ocp-mcp/server.py"],
+      "env": {
+        "OCP_API_URL":    "${input:ocp-api-url}",
+        "OCP_TOKEN":      "${input:ocp-token}",
+        "OCP_VERIFY_SSL": "false"
+      }
+    }
+
+  }
+}
